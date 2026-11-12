@@ -43,26 +43,9 @@
           "getAccountsBy": "specificIdentity",
           "identity.$": "$.getIdentity1.id"
         },
-        "nextStep": "Check Account Retrieval Limit",
+        "nextStep": "Define Variable",
         "type": "action",
         "versionNumber": 1
-      },
-      "Check Account Retrieval Limit": {
-        "type": "choice",
-        "choiceList": [
-          {
-            "comparator": "NumericGreaterThanEquals",
-            "variableA.$": "$.getAccounts.accounts.length()",
-            "nextStep": "Account Retrieval Limit Reached",
-            "variableB": 250
-          }
-        ],
-        "defaultStep": "Define Variable"
-      },
-      "Account Retrieval Limit Reached": {
-        "actionId": "sp:operator-failure",
-        "type": "failure",
-        "description": "Get Accounts returned its 250-account limit. Completeness cannot be guaranteed; use paginated account retrieval before selecting a latest account."
       },
       "Define Variable": {
         "actionId": "sp:define-variable",
@@ -89,32 +72,9 @@
         "attributes": {
           "input.$": "$.getAccounts.accounts[?(@.sourceName == 'application')]",
           "loopType": "forLoop",
-          "start": "Timestamp Is String",
+          "start": "First Account",
           "steps": {
-            "Timestamp Is String": {
-              "type": "choice",
-              "choiceList": [
-                {
-                  "comparator": "IsString",
-                  "variableA.$": "$.loop.loopInput.attributes['last refreshed at']",
-                  "nextStep": "Timestamp Has Expected Format"
-                }
-              ],
-              "defaultStep": "End Iteration"
-            },
-            "Timestamp Has Expected Format": {
-              "type": "choice",
-              "choiceList": [
-                {
-                  "comparator": "StringMatches",
-                  "variableA.$": "$.loop.loopInput.attributes['last refreshed at']",
-                  "nextStep": "First Valid Account",
-                  "variableB": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01]) ([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
-                }
-              ],
-              "defaultStep": "End Iteration"
-            },
-            "First Valid Account": {
+            "First Account": {
               "type": "choice",
               "choiceList": [
                 {
@@ -221,9 +181,9 @@
           "recipientEmailList": [
             "test@example.com"
           ],
-          "subject": "No eligible application account found",
+          "subject": "No application account found",
           "context": {},
-          "body": "<p>Selected identity ID: {{$.getIdentity1.id}}</p><p>No account on source application has a last refreshed at value in YYYY-MM-DD HH:MM:SS format. No account ID was selected.</p>"
+          "body": "<p>Selected identity ID: {{$.getIdentity1.id}}</p><p>No account was found on source application. No account ID was selected.</p>"
         },
         "nextStep": "End Step - Success",
         "type": "action",
