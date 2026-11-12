@@ -1,0 +1,245 @@
+{
+  "name": "WIP - Select Most Recently Refreshed Application Account",
+  "description": "Select an identity interactively, retrieve its accounts, and use a serial loop with Update Variable to find the application account with the latest last refreshed at timestamp. Email the ISC technical account ID to test@example.com. Assumes all timestamps use the same timezone.",
+  "enabled": false,
+  "definition": {
+    "start": "Interactive Form",
+    "steps": {
+      "Interactive Form": {
+        "actionId": "sp:interactive-form",
+        "attributes": {
+          "formDefinitionId": "REPLACE_WITH_IDENTITY_SELECTION_FORM_ID",
+          "interactiveProcessId.$": "$.trigger.interactiveProcessId",
+          "ownerId.$": "$.trigger.launchedBy.id",
+          "title": "Select Identity for Latest Application Account"
+        },
+        "nextStep": "Get Identity",
+        "type": "action",
+        "versionNumber": 1
+      },
+      "Get Identity": {
+        "actionId": "sp:get-identity",
+        "attributes": {
+          "id.$": "$.trigger.launchedBy.id"
+        },
+        "nextStep": "Get Identity 1",
+        "type": "action",
+        "versionNumber": 2,
+        "description": "Get the identity that launched the interactive process."
+      },
+      "Get Identity 1": {
+        "actionId": "sp:get-identity",
+        "attributes": {
+          "id.$": "$.interactiveForm.formData.identityId"
+        },
+        "nextStep": "Get Accounts",
+        "type": "action",
+        "versionNumber": 2,
+        "description": "Get the identity selected in the interactive form."
+      },
+      "Get Accounts": {
+        "actionId": "sp:get-accounts",
+        "attributes": {
+          "getAccountsBy": "specificIdentity",
+          "identity.$": "$.getIdentity1.id"
+        },
+        "nextStep": "Check Account Retrieval Limit",
+        "type": "action",
+        "versionNumber": 1
+      },
+      "Check Account Retrieval Limit": {
+        "type": "choice",
+        "choiceList": [
+          {
+            "comparator": "NumericGreaterThanEquals",
+            "variableA.$": "$.getAccounts.accounts.length()",
+            "nextStep": "Account Retrieval Limit Reached",
+            "variableB": 250
+          }
+        ],
+        "defaultStep": "Define Variable"
+      },
+      "Account Retrieval Limit Reached": {
+        "actionId": "sp:operator-failure",
+        "type": "failure",
+        "description": "Get Accounts returned its 250-account limit. Completeness cannot be guaranteed; use paginated account retrieval before selecting a latest account."
+      },
+      "Define Variable": {
+        "actionId": "sp:define-variable",
+        "attributes": {
+          "id": "sp:define-variable",
+          "variables": [
+            {
+              "name": "latestAccountId",
+              "transforms": [],
+              "variableA": ""
+            },
+            {
+              "name": "latestRefreshedAt",
+              "transforms": [],
+              "variableA": ""
+            }
+          ]
+        },
+        "nextStep": "Serial Loop",
+        "type": "Mutation"
+      },
+      "Serial Loop": {
+        "actionId": "sp:serial:iterator",
+        "attributes": {
+          "input.$": "$.getAccounts.accounts[?(@.sourceName == 'application')]",
+          "loopType": "forLoop",
+          "start": "Timestamp Is String",
+          "steps": {
+            "Timestamp Is String": {
+              "type": "choice",
+              "choiceList": [
+                {
+                  "comparator": "IsString",
+                  "variableA.$": "$.loop.loopInput.attributes['last refreshed at']",
+                  "nextStep": "Timestamp Has Expected Format"
+                }
+              ],
+              "defaultStep": "End Iteration"
+            },
+            "Timestamp Has Expected Format": {
+              "type": "choice",
+              "choiceList": [
+                {
+                  "comparator": "StringMatches",
+                  "variableA.$": "$.loop.loopInput.attributes['last refreshed at']",
+                  "nextStep": "First Valid Account",
+                  "variableB": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01]) ([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
+                }
+              ],
+              "defaultStep": "End Iteration"
+            },
+            "First Valid Account": {
+              "type": "choice",
+              "choiceList": [
+                {
+                  "comparator": "StringEquals",
+                  "variableA.$": "$.defineVariable.latestAccountId",
+                  "nextStep": "Update Latest Account",
+                  "variableB": ""
+                }
+              ],
+              "defaultStep": "Compare Last Refreshed At"
+            },
+            "Compare Last Refreshed At": {
+              "type": "choice",
+              "choiceList": [
+                {
+                  "comparator": "StringGreaterThan",
+                  "variableA.$": "$.loop.loopInput.attributes['last refreshed at']",
+                  "nextStep": "Update Latest Account",
+                  "variableB.$": "$.defineVariable.latestRefreshedAt"
+                }
+              ],
+              "defaultStep": "End Iteration"
+            },
+            "Update Latest Account": {
+              "actionId": "sp:update-variable",
+              "attributes": {
+                "id": "sp:update-variable",
+                "variables": [
+                  {
+                    "name": "$.defineVariable.latestAccountId",
+                    "transforms": [],
+                    "variableA.$": "$.loop.loopInput.id"
+                  },
+                  {
+                    "name": "$.defineVariable.latestRefreshedAt",
+                    "transforms": [],
+                    "variableA.$": "$.loop.loopInput.attributes['last refreshed at']"
+                  }
+                ]
+              },
+              "nextStep": "End Iteration",
+              "type": "Mutation"
+            },
+            "End Iteration": {
+              "actionId": "sp:operator-success",
+              "type": "success"
+            }
+          }
+        },
+        "nextStep": "Capture Selected Account",
+        "type": "action",
+        "versionNumber": 1,
+        "description": "Visit every matching account sequentially. Fixed-width timestamps compare in chronological order. Keep the first encountered account on a tie."
+      },
+      "Capture Selected Account": {
+        "actionId": "sp:define-variable",
+        "attributes": {
+          "id": "sp:define-variable",
+          "variables": [
+            {
+              "name": "accountId",
+              "transforms": [],
+              "variableA.$": "$.defineVariable.latestAccountId"
+            },
+            {
+              "name": "lastRefreshedAt",
+              "transforms": [],
+              "variableA.$": "$.defineVariable.latestRefreshedAt"
+            }
+          ]
+        },
+        "nextStep": "Account Selected",
+        "type": "Mutation"
+      },
+      "Account Selected": {
+        "type": "choice",
+        "choiceList": [
+          {
+            "comparator": "StringEquals",
+            "variableA.$": "$.captureSelectedAccount.accountId",
+            "nextStep": "Send No Match Email",
+            "variableB": ""
+          }
+        ],
+        "defaultStep": "Send Email"
+      },
+      "Send Email": {
+        "actionId": "sp:send-email",
+        "attributes": {
+          "recipientEmailList": [
+            "test@example.com"
+          ],
+          "subject": "Most recently refreshed application account",
+          "context": {},
+          "body": "<p>Selected identity ID: {{$.getIdentity1.id}}</p><p>Source: application</p><p>Most recently refreshed account ID: <strong>{{$.captureSelectedAccount.accountId}}</strong></p><p>last refreshed at: {{$.captureSelectedAccount.lastRefreshedAt}}</p>"
+        },
+        "nextStep": "End Step - Success",
+        "type": "action",
+        "versionNumber": 2
+      },
+      "Send No Match Email": {
+        "actionId": "sp:send-email",
+        "attributes": {
+          "recipientEmailList": [
+            "test@example.com"
+          ],
+          "subject": "No eligible application account found",
+          "context": {},
+          "body": "<p>Selected identity ID: {{$.getIdentity1.id}}</p><p>No account on source application has a last refreshed at value in YYYY-MM-DD HH:MM:SS format. No account ID was selected.</p>"
+        },
+        "nextStep": "End Step - Success",
+        "type": "action",
+        "versionNumber": 2
+      },
+      "End Step - Success": {
+        "actionId": "sp:operator-success",
+        "type": "success"
+      }
+    }
+  },
+  "trigger": {
+    "type": "EVENT",
+    "attributes": {
+      "id": "idn:interactive-process-launched",
+      "filter.$": "$[?(@.workflowId == 'REPLACE_WITH_CREATED_WORKFLOW_ID')]"
+    }
+  }
+}
